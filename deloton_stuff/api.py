@@ -19,26 +19,40 @@ password = os.environ['SQL_PASSWORD']
 
 sql = SQLConnection(dbname, username, host, password)
 
-rides_df = sql.q("SELECT * FROM rides")
+def load_rides():
+    rides_df = sql.q("SELECT * FROM rides")
+    rides_df['start_time'] = rides_df['start_time'].apply(lambda x: str(x))
+    rides_df['start_year'] = rides_df['start_time'].apply(lambda x: str(x[:4]))
+    rides_df['start_month'] = rides_df['start_time'].apply(lambda x: str(x[5:7]))
+    rides_df['start_day'] = rides_df['start_time'].apply(lambda x: str(x[8:10]))
+    return rides_df
+
 users_df = sql.q("SELECT * FROM users")
 users_df['account_created'] = users_df['account_created'].apply(lambda x: str(x))
-rides_df['start_time'] = rides_df['start_time'].apply(lambda x: str(x))
 joined_df = sql.q("""SELECT t1.gender, t1.age, t2.* FROM users AS t1
                     INNER JOIN rides AS t2 ON t1.user_id=t2.user_id""")
 
 joined_df['start_time'] = joined_df['start_time'].apply(lambda x: str(x))
 
-male_rides = sql.q("""SELECT t1.gender, t1.age, t2.* FROM users AS t1
-                    INNER JOIN rides AS t2 ON t1.user_id=t2.user_id
-                    WHERE t1.gender = 'male'""")
+def load_male_rides():
 
-male_rides['start_time'] = male_rides['start_time'].apply(lambda x: str(x))
+    male_rides = sql.q("""SELECT t1.gender, t1.age, t2.* FROM users AS t1
+                        INNER JOIN rides AS t2 ON t1.user_id=t2.user_id
+                        WHERE t1.gender = 'male'""")
 
-female_rides = sql.q("""SELECT t1.gender, t1.age, t2.* FROM users AS t1
-                    INNER JOIN rides AS t2 ON t1.user_id=t2.user_id
-                    WHERE t1.gender = 'female'""")
+    male_rides['start_time'] = male_rides['start_time'].apply(lambda x: str(x))
 
-female_rides['start_time'] = female_rides['start_time'].apply(lambda x: str(x))
+    return male_rides
+
+def load_female_rides():
+
+    female_rides = sql.q("""SELECT t1.gender, t1.age, t2.* FROM users AS t1
+                        INNER JOIN rides AS t2 ON t1.user_id=t2.user_id
+                        WHERE t1.gender = 'female'""")
+
+    female_rides['start_time'] = female_rides['start_time'].apply(lambda x: str(x))
+
+    return female_rides
 
 @app.route("/", methods=["GET"])
 def test():
@@ -47,6 +61,7 @@ def test():
 # Get a ride with a specific ID:
 @app.route("/ride/<int:ride_id>", methods=["GET"])
 def get_user_ride(ride_id):
+    rides_df = load_rides()
     df_filter = rides_df[rides_df["ride_id"] == ride_id]
     df_filter = df_filter.to_json(orient="records")
     return(df_filter)
@@ -75,11 +90,15 @@ def get_user_gender(gender):
 # #Get all rides:
 @app.route("/rides", methods=["GET"])
 def get_rides():
+    rides_df = load_rides()
     return(rides_df.to_json(orient="records"))
 
 # #Get rides by gender:
 @app.route("/rides/<gender>", methods=["GET"])
 def get_ride_gender(gender):
+    male_rides = load_male_rides()
+    female_rides = load_female_rides()
+
     if gender == "Male" or gender == "male":
         joined_rides = male_rides[["ride_id","start_time","duration","avg_resistance","avg_rpm","avg_power","avg_hrt", "user_id"]]
     else:
@@ -120,6 +139,7 @@ def get_rider_age():
 # ## Get all rides for a rider with a specific ID
 @app.route("/rider/<int:user_id>/rides", methods=["GET"])
 def get_user_rides(user_id):
+    rides_df = load_rides()
     df_filter = rides_df[rides_df['user_id'] == user_id]
     return(df_filter.to_json(orient="records"))
 
@@ -133,9 +153,7 @@ def date():
     current_month = current_time.month
     current_day = current_time.day
 
-    rides_df['start_year'] = rides_df['start_time'].apply(lambda x: str(x[:4]))
-    rides_df['start_month'] = rides_df['start_time'].apply(lambda x: str(x[5:7]))
-    rides_df['start_day'] = rides_df['start_time'].apply(lambda x: str(x[8:10]))
+    rides_df = load_rides()
 
     if result == None:
        current_year = current_time.year
@@ -164,18 +182,12 @@ def date():
 
 
 # # # delete a ride with a specific ID:
-# @app.route("/ride/del/<int:session_id>", methods=["GET"])
-# def delete_ride(session_id):
-#   try:
-#     for i in ride_data:
-#       if i['session_id'] == int(session_id):
-#         ride_data.remove(i)
-#     with open('Data/ride_data.json', 'w') as f:
-#       f.write(ride_data)
-
-#     return('ride successfully deleted')
-#   except:
-#     return('ride was not deleted')
+@app.route("/ride/del/<int:session_id>", methods=["GET","DELETE"])
+def delete_ride(session_id):
+    sql.q("""DELETE FROM rides WHERE ride_id='%d'"""%(session_id))
+    return('ride successfully deleted')
+# 
+#
   
 
 
